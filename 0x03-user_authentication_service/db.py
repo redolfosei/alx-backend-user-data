@@ -1,37 +1,30 @@
 #!/usr/bin/env python3
-""" DB module
+"""DB module
 """
-
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import InvalidRequestError
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.orm.session import Session
 from user import Base, User
-from typing import TypeVar
-
-VALID_FIELDS = ['id', 'email', 'hashed_password', 'session_id',
-                'reset_token']
 
 
 class DB:
-    """
-    DB class.
+    """DB class
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize a new DB instance
         """
-        Constructor.
-        """
-        self._engine = create_engine("sqlite:///a.db", echo=False)
+        # self._engine = create_engine("sqlite:///a.db", echo=True)
+        self._engine = create_engine("sqlite:///a.db")
         Base.metadata.drop_all(self._engine)
         Base.metadata.create_all(self._engine)
         self.__session = None
 
     @property
-    def _session(self):
-        """
-        _session.
+    def _session(self) -> Session:
+        """Memoized session object
         """
         if self.__session is None:
             DBSession = sessionmaker(bind=self._engine)
@@ -39,37 +32,43 @@ class DB:
         return self.__session
 
     def add_user(self, email: str, hashed_password: str) -> User:
-        """
-        add_user.
-        """
-        if not email or not hashed_password:
-            return
-        user = User(email=email, hashed_password=hashed_password)
-        session = self._session
-        session.add(user)
-        session.commit()
-        return user
+        """stores a new user to db"""
+        new_user = User()  # create user instance
+        # update it's attributes
+        new_user.email = email
+        new_user.hashed_password = hashed_password
+        self._session.add(new_user)
+        self.__session.commit()
+        return new_user
 
     def find_user_by(self, **kwargs) -> User:
+        """find users by a given key, value.
+        Key must be a column name in db
         """
-        find_user_by.
-        """
-        if not kwargs or any(x not in VALID_FIELDS for x in kwargs):
-            raise InvalidRequestError
-        session = self._session
-        try:
-            return session.query(User).filter_by(**kwargs).one()
-        except Exception:
+        table_columns = list(User.__dict__.keys())
+        # print(table_columns)
+        keyz = kwargs.keys()
+        search = {}
+        for key in keyz:
+            if key not in table_columns:
+                raise InvalidRequestError
+            value = kwargs[key]
+            search[key] = value
+        found = self._session.query(User).filter_by(**search).first()
+        # print(found.email)
+        if not found:
             raise NoResultFound
+        return found
 
     def update_user(self, user_id: int, **kwargs) -> None:
-        """
-        update_user.
-        """
-        session = self._session
+        """update a user whose, id is given"""
+        table_columns = list(User.__dict__.keys())
+        keyz = kwargs.keys()
         user = self.find_user_by(id=user_id)
-        for k, v in kwargs.items():
-            if k not in VALID_FIELDS:
+        for key in keyz:
+            if key not in table_columns:
                 raise ValueError
-            setattr(user, k, v)
-        session.commit()
+            setattr(user, key, kwargs[key])
+            # user.update(key, kwargs[key])
+        # print(user.hashed_password)
+        self._session.commit()
